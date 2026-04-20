@@ -1,8 +1,6 @@
 # Carbon MCP: Heuristic Code Carbon Analyzer
 
-
 <img src="assets/carbon-cli-example.jpeg" alt="Carbon CLI analysis example" style="width: 70%; min-width: 220px; max-width: 400px; object-fit: contain; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px #0001;"/> <img src="assets/carbon-mcp-example.jpeg" alt="Carbon MCP example" style="width: 28%; height: 40%; min-width: 220px; max-width: 400px; object-fit: contain; border: 1px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px #0001;"/>
-
 
 > Analyze source code for carbon-inefficient patterns, estimate CO₂ emissions, and return actionable optimization suggestions.
 
@@ -71,7 +69,7 @@ This repository already includes a VS Code MCP configuration. If you need to set
 }
 ```
 
-### CLI
+## CLI
 
 Analyze a file:
 
@@ -91,7 +89,7 @@ Start the MCP stdio server for VS Code or other MCP clients:
 carbon serve-mcp
 ```
 
-### API
+## API
 
 The FastAPI app listens on `http://127.0.0.1:8000` by default.
 
