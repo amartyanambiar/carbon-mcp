@@ -1,167 +1,118 @@
 # Carbon MCP
 
-> An MCP-style server that analyzes source code for carbon-inefficient patterns,
-> estimates CO₂ emissions, and returns actionable optimization suggestions.
+> Analyze source code for carbon-inefficient patterns, estimate CO₂ emissions, and return actionable optimization suggestions.
 
----
+## What it does
 
-## Architecture
+Carbon MCP currently focuses on Python source. It detects a small set of heuristic hotspots, estimates their energy use and CO₂ impact, and returns suggestions that explain what to change and why.
+
+The estimates are intentionally heuristic. They are designed for directional guidance, trend comparison, and quick developer decision-making — not audited carbon accounting. Key assumptions and standards used by Carbon MCP:
+
+- **Grid intensity baseline & energy heuristics:**
+
+| Parameter            | Value              | Source/file            | Notes                                 |
+| -------------------- | ------------------ | ---------------------- | ------------------------------------- |
+| Grid intensity       | 0.475 kg CO₂ / kWh | `estimators/carbon.py` | IEA 2022 world average (overrideable) |
+| `nested_loop`        | 2.8 × 10⁻⁶ kWh     | `estimators/energy.py` | 100×100 iterations, 100W server       |
+| `repeated_api_call`  | 3.6 × 10⁻⁷ kWh     | `estimators/energy.py` | ~1 KB HTTPS round-trip                |
+| (other/unknown type) | 1.0 × 10⁻⁷ kWh     | `estimators/energy.py` | Fallback for unclassified hotspots    |
+
+These values are coarse, linear proxies used to rank and compare hotspots. For region-specific grid intensity, override `CARBON_INTENSITY_KG_PER_KWH` in your deployment.
+
+- **Confidence level:** Emissions returned by the pipeline currently carry a conservative `low` confidence flag because the underlying hotspot counts and scaling assumptions are heuristic.
+- **Intended use:** Use the output to identify relative hotspots, prioritize optimizations, and track trends across versions or deployments. The tool is useful in development and code-review workflows and as an MCP service for editor/agent integrations.
+
+In short: results are actionable for developers and teams as directional guidance, but they are not a substitute for measured or audited carbon accounting.
+
+The current analysis pipeline is:
+
+User code -> Python AST analyzer -> hotspots -> energy estimate -> carbon estimate -> suggestions -> structured response
+
+## Project layout
 
 ```
 carbon-mcp/
-├── server/
-│   ├── api.py          # FastAPI application — POST /analyze_code, GET /health
-│   └── schemas.py      # Pydantic request/response contracts
-├── analyzer/
-│   ├── base.py         # Abstract BaseAnalyzer interface
-│   └── python_analyzer.py  # AST-based Python analyzer
-├── estimators/
-│   ├── energy.py       # Hotspot → kWh heuristics
-│   └── carbon.py       # kWh → kg CO₂ via grid intensity
-├── rules/
-│   ├── loops.py        # Detect nested for/while loops
-│   └── api_calls.py    # Detect uncached HTTP calls
-├── core/
-│   └── engine.py       # Orchestrates analyzer + estimators + suggestions
-├── cli/
-│   └── main.py         # Typer CLI (`carbon analyze` / `carbon serve`)
-└── tests/
-    └── test_analyzer.py
+├── analyzer/        # Analyzer abstractions and Python AST implementation
+├── cli/             # Typer CLI entry point
+├── core/            # Analysis engine and suggestion orchestration
+├── estimators/      # Energy and carbon estimation heuristics
+├── rules/           # Pattern detectors used by the Python analyzer
+├── server/          # FastAPI app, MCP stdio server, and response schemas
+└── tests/           # Analyzer tests
 ```
 
-**Data flow:**
-
-```
-User code
-  → PythonAnalyzer (AST rules)
-      → list[Hotspot]
-          → EnergyEstimator  → kWh
-          → CarbonEstimator  → kg CO₂
-          → SuggestionEngine → list[Suggestion]
-              → AnalyzeResponse (JSON)
-```
-
-Adding a new rule is a single file drop into `rules/` and a one-line registration
-in `analyzer/python_analyzer.py`.
-
----
-
-## Quick Start
-
-### 1. Install
+## Install
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
-# or without editable install:
 pip install -r requirements.txt
 ```
 
-### 2. Run the API server
+## Run
 
-```bash
-# Via CLI helper
-carbon serve
+## VS Code MCP setup
 
-# Or directly with uvicorn
-uvicorn server.api:app --reload
-```
-
-The server starts on **http://127.0.0.1:8000**.  
-Interactive docs: http://127.0.0.1:8000/docs
-
-### 3. Analyze code via the API
-
-```bash
-curl -X POST http://localhost:8000/analyze_code \
-  -H "Content-Type: application/json" \
-  -d '{"code": "for i in range(100):\n    for j in range(100):\n        pass"}'
-```
-
-**Response:**
+This repository already includes a VS Code MCP configuration. If you need to set it up manually, point the server at `server.mcp_server` with the Python interpreter from your virtual environment.
 
 ```json
 {
-  "emissions": {
-    "estimated_co2_kg": 1.33e-9,
-    "energy_kwh": 2.8e-9,
-    "confidence": "low"
-  },
-  "hotspots": [
-    {
-      "line": 2,
-      "type": "nested_loop",
-      "description": "Nested loop detected (depth 2). This may result in O(n²) or worse complexity.",
-      "severity": "high"
+  "servers": {
+    "carbon": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["-m", "server.mcp_server"]
     }
-  ],
-  "suggestions": [
-    {
-      "hotspot_type": "nested_loop",
-      "description": "Replace nested loops with a hash-map lookup",
-      "guidance": "..."
-    }
-  ]
+  }
 }
 ```
 
-### 4. Analyze a file via the CLI
+### CLI
+
+Analyze a file:
 
 ```bash
-carbon analyze path/to/your_script.py
+carbon analyze path/to/script.py
 ```
 
----
+Start the HTTP API:
 
-## Running Tests
+```bash
+carbon serve
+```
+
+Start the MCP stdio server for VS Code or other MCP clients:
+
+```bash
+carbon serve-mcp
+```
+
+### API
+
+The FastAPI app listens on `http://127.0.0.1:8000` by default.
+
+Health check:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Analyze code:
+
+```bash
+curl -X POST http://127.0.0.1:8000/analyze_code \
+  -H "Content-Type: application/json" \
+  -d '{"code":"for i in range(100):\n    for j in range(100):\n        pass"}'
+```
+
+The response includes `emissions`, `hotspots`, and `suggestions`.
+
+## Testing
 
 ```bash
 pytest -v
 ```
 
----
+## Extending the analyzer
 
-## Extending Carbon MCP
-
-### Add a new detection rule
-
-1. Create `rules/my_rule.py` and implement a function:
-
-   ```python
-   def detect_my_pattern(tree: ast.AST) -> list[Hotspot]: ...
-   ```
-
-2. Register it in `analyzer/python_analyzer.py`:
-
-   ```python
-   from rules.my_rule import detect_my_pattern
-   _RULES = [..., detect_my_pattern]
-   ```
-
-3. Optionally add a suggestion in `core/engine.py` under `_SUGGESTIONS`.
-
-### Add a new language analyzer
-
-1. Subclass `analyzer.base.BaseAnalyzer` and set `language = "js"`.
-2. Register the instance in `core/engine._ANALYZERS`.
-
----
-
-## Carbon Estimation Model
-
-The model is intentionally heuristic and meant for directional guidance:
-
-| Hotspot           | Energy / occurrence | Basis                              |
-|-------------------|--------------------|------------------------------------|
-| `nested_loop`     | 2.8 × 10⁻⁶ kWh    | 100×100 iterations on 100 W server |
-| `repeated_api_call` | 3.6 × 10⁻⁷ kWh  | ~1 KB HTTPS round-trip             |
-
-Grid intensity default: **0.475 kg CO₂ / kWh** (IEA 2022 world average).  
-Override in `estimators/carbon.py` for region-specific accuracy.
-
----
-
-## License
-
-MIT
+To add a new detector, create a rule in `rules/`, register it in `analyzer/python_analyzer.py`, and add a suggestion in `core/engine.py` if the new hotspot should have guidance.

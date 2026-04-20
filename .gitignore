@@ -1,13 +1,4 @@
 /.dist
 /.pytest_cache
 /.venv
-/analyzer
 /carbon_mcp.egg-info
-/cli
-/core
-/estimators
-/pyproject.toml
-/requirements.txt
-/rules
-/server
-/tests

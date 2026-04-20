@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "carbon": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["-m", "server.mcp_server"]
+    }
+  }
+}
