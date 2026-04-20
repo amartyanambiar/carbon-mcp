@@ -1,4 +1,4 @@
-# Carbon MCP
+# Carbon MCP: Heuristic Code Carbon Analyzer
 
 > Analyze source code for carbon-inefficient patterns, estimate CO₂ emissions, and return actionable optimization suggestions.
 
